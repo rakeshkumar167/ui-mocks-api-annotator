@@ -144,7 +144,6 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
   }, [handleMouseUp]); // Only re-run if handleMouseUp changes
 
   return (
-    // Removed p-4 from here, it's now on the parent container in App.js
     <div className="flex flex-col lg:flex-row w-full gap-6">
       {/* Image Display Area */}
       <div className="relative flex-1 bg-white p-4 rounded-lg shadow-lg flex justify-center items-center">
@@ -210,7 +209,6 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
       </div>
 
       {/* API Details Form */}
-      {/* Added flex-grow and flex-shrink-0, and max-h-full for proper scrolling */}
       <div className="w-full lg:w-96 bg-white p-6 rounded-lg shadow-lg overflow-y-auto flex-grow flex-shrink-0 max-h-full">
         <h2 className="text-2xl font-semibold text-gray-800 mb-4">
           {selectedAnnotationIndex !== null ? `API Details for Section ${selectedAnnotationIndex + 1}` : 'API Details'}
@@ -346,6 +344,9 @@ function App() {
   const [editingTabName, setEditingTabName] = useState(false);
   const [currentTabNameInput, setCurrentTabNameInput] = useState('');
 
+  // Ref for the hidden file input for loading data
+  const fileInputRef = useRef(null);
+
   // Effect to set the first image as selected when images are loaded
   useEffect(() => {
     if (images.length > 0 && selectedImageId === null) {
@@ -368,6 +369,7 @@ function App() {
         setImages((prev) => [...prev, newImage]);
         setSelectedImageId(newImage.id); // Select the new tab
         setNewTabName(''); // Clear the input
+        event.target.value = null; // Clear the file input
       };
       reader.readAsDataURL(file);
     }
@@ -408,6 +410,56 @@ function App() {
   const startEditingTabName = (imageName) => {
     setEditingTabName(true);
     setCurrentTabNameInput(imageName);
+  };
+
+  // Function to save all images and annotations to a JSON file
+  const handleSaveData = () => {
+    try {
+      const dataToSave = JSON.stringify(images, null, 2); // Pretty print JSON
+      const blob = new Blob([dataToSave], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ui-mocks-annotations.json';
+      document.body.appendChild(a); // Append to body to make it clickable
+      a.click(); // Programmatically click the link to trigger download
+      document.body.removeChild(a); // Clean up the element
+      URL.revokeObjectURL(url); // Release the object URL
+    } catch (error) {
+      console.error("Failed to save data:", error);
+      // In a real app, you might show a user-friendly error message here
+    }
+  };
+
+  // Function to load data from a JSON file
+  const handleLoadData = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const loadedData = JSON.parse(e.target.result);
+          // Basic validation: ensure it's an array and has expected properties
+          if (Array.isArray(loadedData) && loadedData.every(item => item.id && item.name && item.url && Array.isArray(item.annotations))) {
+            setImages(loadedData);
+            // Select the first image if data is loaded
+            if (loadedData.length > 0) {
+              setSelectedImageId(loadedData[0].id);
+            } else {
+              setSelectedImageId(null);
+            }
+          } else {
+            console.error("Loaded data is not in the expected format.");
+            // Show error to user
+          }
+        } catch (error) {
+          console.error("Error parsing JSON file:", error);
+          // Show error to user
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = null; // Clear the file input
+    }
   };
 
   return (
@@ -459,6 +511,27 @@ function App() {
             />
           </div>
         </div>
+
+        {/* Save/Load Data Buttons */}
+        <div className="flex items-center gap-2 mt-2 sm:mt-0 sm:ml-4">
+          <button
+            onClick={handleSaveData}
+            className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700 transition-colors duration-200"
+          >
+            Save Data
+          </button>
+          <label htmlFor="load-data-file" className="px-4 py-2 bg-yellow-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-yellow-700 transition-colors duration-200">
+            Load Data
+          </label>
+          <input
+            type="file"
+            id="load-data-file"
+            accept=".json"
+            onChange={handleLoadData}
+            className="hidden"
+            ref={fileInputRef} // Assign ref to clear input
+          />
+        </div>
       </nav>
 
       {/* Current Tab Name Editing (moved outside nav but still prominent) */}
@@ -499,11 +572,9 @@ function App() {
       )}
 
       {/* Main Content Area and Annotations List Container */}
-      {/* This div will take the remaining vertical space and handle overall scrolling */}
-      <div className="flex-grow overflow-y-auto p-4"> {/* Added p-4 here to apply padding to the entire scrollable content */}
+      <div className="flex-grow overflow-y-auto p-4">
         {currentImage ? (
           <>
-            {/* ImageAnnotatorTab - removed h-full from its root div */}
             <ImageAnnotatorTab
               key={currentImage.id}
               image={currentImage}
