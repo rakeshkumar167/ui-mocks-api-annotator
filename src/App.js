@@ -165,14 +165,12 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
   return (
     <div className="flex flex-col lg:flex-row w-full gap-6">
       {/* Image Display Area */}
-      {/* The image container itself needs to be relative */}
-      <div className="relative flex-1 bg-white p-4 rounded-lg shadow-lg flex justify-center items-center">
+      {/* Changed items-center to items-start to align content to the top */}
+      <div className="relative flex-1 bg-white p-6 rounded-xl shadow-lg flex justify-center items-start overflow-hidden">
         {!imageUrl && (
           <p className="text-gray-500 text-lg">Upload an image to start annotating.</p>
         )}
         {imageUrl && (
-          // THIS IS THE KEY DIV: It's relative, contains the image, and will contain annotations.
-          // Mouse events for drawing are now on this div.
           <div
             ref={imageWrapperRef} // Assign ref to this div for correct coordinate calculation
             className="relative w-full h-auto cursor-crosshair" // Added cursor-crosshair here
@@ -193,7 +191,7 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
                 key={annotation.id} // Use unique annotation ID for key
                 className={`absolute border-2 ${
                   selectedAnnotationIndex === index ? 'border-blue-500 bg-blue-500 bg-opacity-20' : 'border-red-500 bg-red-500 bg-opacity-10'
-                } hover:border-blue-500 hover:bg-blue-500 hover:bg-opacity-20 transition-all duration-150 ease-in-out cursor-pointer flex justify-center items-center`}
+                } hover:border-blue-500 hover:bg-blue-500 hover:bg-opacity-20 transition-all duration-150 ease-in-out cursor-pointer flex justify-center items-center rounded-md`}
                 style={{
                   // Use ratios multiplied by current displayed dimensions
                   left: `${annotation.ratioX * currentDisplayedWidth}px`,
@@ -213,10 +211,10 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
               </div>
             ))}
 
-            {/* Display the rectangle being drawn - MOVED HERE */}
+            {/* Display the rectangle being drawn */}
             {isDrawing && currentRect.width > 0 && currentRect.height > 0 && (
               <div
-                className="absolute border-2 border-green-500 bg-green-500 bg-opacity-20"
+                className="absolute border-2 border-green-500 bg-green-500 bg-opacity-20 rounded-md"
                 style={{
                   left: `${currentRect.x}px`,
                   top: `${currentRect.y}px`,
@@ -230,8 +228,8 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
       </div>
 
       {/* API Details Form */}
-      <div className="w-full lg:w-96 bg-white p-6 rounded-lg shadow-lg overflow-y-auto flex-grow flex-shrink-0 max-h-full">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-4">
+      <div className="w-full lg:w-96 bg-white p-6 rounded-xl shadow-lg overflow-y-auto flex-grow flex-shrink-0 max-h-full"> {/* Increased padding, more rounded, subtle shadow */}
+        <h2 className="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2"> {/* Added border-b for separation */}
           {selectedAnnotationIndex !== null ? `API Details for Section ${selectedAnnotationIndex + 1}` : 'API Details'}
         </h2>
         {selectedAnnotationIndex !== null ? (
@@ -246,7 +244,7 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
                 name="name"
                 value={apiDetails.name}
                 onChange={handleApiDetailsChange}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all duration-200"
                 placeholder="e.g., User Profile Fetch"
               />
             </div>
@@ -261,7 +259,7 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
                 name="endpoint"
                 value={apiDetails.endpoint}
                 onChange={handleApiDetailsChange}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all duration-200"
                 placeholder="e.g., /api/users/{id}"
               />
             </div>
@@ -275,7 +273,7 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
                 name="method"
                 value={apiDetails.method}
                 onChange={handleApiDetailsChange}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all duration-200"
               >
                 <option value="GET">GET</option>
                 <option value="POST">POST</option>
@@ -294,7 +292,7 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
                 value={apiDetails.requestBody}
                 onChange={handleApiDetailsChange}
                 rows="4"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 font-mono text-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 font-mono text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all duration-200"
                 placeholder='{"key": "value"}'
               ></textarea>
             </div>
@@ -309,7 +307,7 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
                 value={apiDetails.responseBody}
                 onChange={handleApiDetailsChange}
                 rows="4"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 font-mono text-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 font-mono text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all duration-200"
                 placeholder='{"data": "response"}'
               ></textarea>
             </div>
@@ -324,7 +322,7 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
                 value={apiDetails.description}
                 onChange={handleApiDetailsChange}
                 rows="3"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all duration-200"
                 placeholder="Brief description of this API call's purpose."
               ></textarea>
             </div>
@@ -332,14 +330,14 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
             <div className="flex justify-between">
               <button
                 type="submit"
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
               >
                 Save Details
               </button>
               <button
                 type="button"
                 onClick={deleteAnnotation}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200"
               >
                 Delete Section
               </button>
@@ -484,64 +482,22 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100 font-sans">
+    <div className="flex flex-col h-screen bg-gray-50 font-sans">
       {/* Navigation Bar / Header */}
-      <nav className="bg-blue-800 text-white p-4 shadow-lg flex flex-col sm:flex-row justify-between items-center w-full">
-        <h1 className="text-3xl font-bold mb-2 sm:mb-0">
+      <nav className="bg-gradient-to-r from-blue-700 to-blue-900 text-white p-4 shadow-xl flex flex-col sm:flex-row justify-between items-center w-full sticky top-0 z-10 rounded-b-lg">
+        <h1 className="text-3xl font-extrabold mb-2 sm:mb-0 tracking-wide">
           UI Mocks API Annotator
         </h1>
-
-        {/* Tab Management Section (moved inside nav for better integration) */}
-        <div className="flex flex-wrap items-center gap-2">
-          {images.map((img) => (
-            <div key={img.id} className="flex items-center">
-              <button
-                className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors duration-200
-                  ${selectedImageId === img.id ? 'bg-blue-600 text-white' : 'bg-blue-700 text-blue-100 hover:bg-blue-600'}`}
-                onClick={() => setSelectedImageId(img.id)}
-              >
-                {img.name}
-              </button>
-              <button
-                className="ml-1 px-2 py-1 text-xs text-red-300 hover:text-red-100 rounded-full"
-                onClick={() => handleDeleteImage(img.id)}
-                title="Delete Tab"
-              >
-                &times;
-              </button>
-            </div>
-          ))}
-          {/* Add New Tab Input */}
-          <div className="flex items-center ml-4">
-            <input
-              type="text"
-              placeholder="New Tab Name"
-              value={newTabName}
-              onChange={(e) => setNewTabName(e.target.value)}
-              className="px-3 py-1 border border-gray-300 rounded-l-md text-sm focus:ring-blue-500 focus:border-blue-500 text-gray-800"
-            />
-            <label htmlFor="add-image-file" className="px-4 py-2 bg-green-600 text-white rounded-r-md cursor-pointer hover:bg-green-700 text-sm font-medium transition-colors duration-200">
-              Add Image
-            </label>
-            <input
-              type="file"
-              id="add-image-file"
-              accept="image/*"
-              onChange={handleAddImage}
-              className="hidden"
-            />
-          </div>
-        </div>
 
         {/* Save/Load Data Buttons */}
         <div className="flex items-center gap-2 mt-2 sm:mt-0 sm:ml-4">
           <button
             onClick={handleSaveData}
-            className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700 transition-colors duration-200"
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors duration-200 shadow-md"
           >
             Save Data
           </button>
-          <label htmlFor="load-data-file" className="px-4 py-2 bg-yellow-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-yellow-700 transition-colors duration-200">
+          <label htmlFor="load-data-file" className="px-4 py-2 bg-yellow-600 text-white rounded-lg text-sm font-medium cursor-pointer hover:bg-yellow-700 transition-colors duration-200 shadow-md">
             Load Data
           </label>
           <input
@@ -550,14 +506,59 @@ function App() {
             accept=".json"
             onChange={handleLoadData}
             className="hidden"
-            ref={fileInputRef} // Assign ref to clear input
+            ref={fileInputRef}
           />
         </div>
       </nav>
 
-      {/* Current Tab Name Editing (moved outside nav but still prominent) */}
+      {/* Tab Management Section (moved below nav bar) */}
+      <div className="w-full bg-white p-4 shadow-md flex flex-wrap items-center justify-between border-b border-gray-200 rounded-b-lg">
+        <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-0">
+          {images.map((img) => (
+            <div key={img.id} className="flex items-center">
+              <button
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+                  ${selectedImageId === img.id ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} border-b-2 ${selectedImageId === img.id ? 'border-blue-300' : 'border-transparent'}`}
+                onClick={() => setSelectedImageId(img.id)}
+              >
+                {img.name}
+              </button>
+              <button
+                className="ml-1 px-2 py-1 text-xs text-red-600 hover:text-red-800 rounded-full transition-colors duration-200"
+                onClick={() => handleDeleteImage(img.id)}
+                title="Delete Tab"
+              >
+                &times;
+              </button>
+            </div>
+          ))}
+        </div>
+        {/* Add New Tab Input and Button */}
+        <div className="flex items-center">
+          <input
+            type="text"
+            placeholder="New Tab Name"
+            value={newTabName}
+            onChange={(e) => setNewTabName(e.target.value)}
+            className="px-3 py-1 border border-gray-300 rounded-l-md text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none text-gray-800"
+          />
+          <label htmlFor="add-image-file" className="px-4 py-2 bg-green-600 text-white rounded-r-md cursor-pointer hover:bg-green-700 text-sm font-medium transition-colors duration-200 shadow-md">
+            Add Image
+          </label>
+          <input
+            type="file"
+            id="add-image-file"
+            accept="image/*"
+            onChange={handleAddImage}
+            className="hidden"
+          />
+        </div>
+      </div>
+
+
+      {/* Current Tab Name Editing */}
       {currentImage && (
-        <div className="w-full bg-white p-4 shadow-sm flex items-center justify-center border-b border-gray-200">
+        <div className="w-full bg-white p-4 shadow-md flex items-center justify-center border-b border-gray-200 rounded-b-lg">
           <span className="text-lg font-semibold text-gray-800 mr-2">Current Tab:</span>
           {editingTabName ? (
             <>
@@ -571,12 +572,12 @@ function App() {
                     handleRenameTab();
                   }
                 }}
-                className="px-2 py-1 border border-gray-300 rounded-md text-lg font-semibold focus:ring-blue-500 focus:border-blue-500"
+                className="px-2 py-1 border border-gray-300 rounded-md text-lg font-semibold focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all duration-200"
                 autoFocus
               />
               <button
                 onClick={handleRenameTab}
-                className="ml-2 px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600"
+                className="ml-2 px-3 py-1 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition-colors duration-200 shadow-sm"
               >
                 Save
               </button>
@@ -593,7 +594,7 @@ function App() {
       )}
 
       {/* Main Content Area and Annotations List Container */}
-      <div className="flex-grow overflow-y-auto p-4">
+      <div className="flex-grow overflow-y-auto p-6 max-w-7xl mx-auto w-full">
         {currentImage ? (
           <>
             <ImageAnnotatorTab
@@ -605,22 +606,22 @@ function App() {
 
             {/* Annotations List */}
             {currentImage.annotations.length > 0 && (
-              <div className="w-full max-w-6xl bg-white p-6 rounded-lg shadow-lg mt-6 mx-auto">
-                <h2 className="text-2xl font-semibold text-gray-800 mb-4">
+              <div className="w-full bg-white p-6 rounded-xl shadow-lg mt-6">
+                <h2 className="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">
                   Annotations for "{currentImage.name}"
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {currentImage.annotations.map((annotation, index) => (
                     <div
                       key={annotation.id}
-                      className={`p-4 border rounded-md ${
+                      className={`p-4 border rounded-lg ${
                         // Simplified selection check for this display list
                         selectedImageId === currentImage.id &&
                         currentImage.annotations[index] &&
                         currentImage.annotations[index].id === annotation.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200'
-                      } cursor-pointer hover:shadow-md transition-shadow duration-200`}
+                          ? 'border-blue-500 bg-blue-50 shadow-md'
+                          : 'border-gray-200 hover:shadow-sm'
+                      } cursor-pointer transition-all duration-200`}
                     >
                       <h3 className="text-lg font-medium text-gray-900 mb-1">
                         {annotation.apiDetails.name || `Section ${index + 1}`}
@@ -634,7 +635,7 @@ function App() {
             )}
           </>
         ) : (
-          <div className="w-full max-w-6xl bg-white p-6 rounded-lg shadow-lg text-center text-gray-500 text-xl flex items-center justify-center h-full mx-auto">
+          <div className="w-full max-w-6xl bg-white p-6 rounded-xl shadow-lg text-center text-gray-500 text-xl flex items-center justify-center h-full mx-auto">
             Please add an image to start annotating.
           </div>
         )}
