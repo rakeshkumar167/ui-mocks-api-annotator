@@ -26,8 +26,10 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
     description: ''
   });
 
-  // Ref for the image container to get its dimensions and position
-  const imageContainerRef = useRef(null);
+  // Ref for the image container (the div that wraps the image and annotations)
+  const imageWrapperRef = useRef(null);
+  // Ref for the actual <img> element to get its displayed dimensions
+  const imgRef = useRef(null);
 
   // Effect to update apiDetails form when a new annotation is selected or image changes
   useEffect(() => {
@@ -46,12 +48,13 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
     }
   }, [selectedAnnotationIndex, annotations, imageUrl]); // Depend on annotations and imageUrl to reset on image change
 
-  // Handle mouse down event on the image container to start drawing
+  // Handle mouse down event on the image wrapper to start drawing
   const handleMouseDown = (event) => {
-    if (!imageUrl) return; // Only draw if an image is loaded
+    if (!imageUrl || !imageWrapperRef.current) return; // Only draw if an image is loaded and wrapper exists
 
     setIsDrawing(true);
-    const rect = imageContainerRef.current.getBoundingClientRect();
+    // Get bounds of the imageWrapperRef (the div that holds the image and annotations)
+    const rect = imageWrapperRef.current.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     setStartPoint({ x, y });
@@ -61,9 +64,9 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
 
   // Handle mouse move event while drawing
   const handleMouseMove = (event) => {
-    if (!isDrawing || !imageUrl) return;
+    if (!isDrawing || !imageUrl || !imageWrapperRef.current) return;
 
-    const rect = imageContainerRef.current.getBoundingClientRect();
+    const rect = imageWrapperRef.current.getBoundingClientRect(); // Get bounds of the imageWrapperRef
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
@@ -82,9 +85,20 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
       setIsDrawing(false);
       // If the drawn rectangle has a valid size, add it as a new annotation
       if (currentRect.width > 5 && currentRect.height > 5) { // Minimum size to avoid tiny clicks
+        const imgElement = imgRef.current;
+        if (!imgElement) return; // Should not happen if drawing is active
+
+        // Get current displayed dimensions of the image
+        const displayedWidth = imgElement.offsetWidth;
+        const displayedHeight = imgElement.offsetHeight;
+
+        // Store ratios instead of absolute pixels
         const newAnnotation = {
           id: generateId(), // Assign a unique ID to the annotation
-          ...currentRect,
+          ratioX: currentRect.x / displayedWidth,
+          ratioY: currentRect.y / displayedHeight,
+          ratioWidth: currentRect.width / displayedWidth,
+          ratioHeight: currentRect.height / displayedHeight,
           apiDetails: {
             name: '',
             endpoint: '',
@@ -143,28 +157,34 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
     };
   }, [handleMouseUp]); // Only re-run if handleMouseUp changes
 
+  // Get current displayed image dimensions for rendering annotations
+  const currentDisplayedWidth = imgRef.current ? imgRef.current.offsetWidth : 0;
+  const currentDisplayedHeight = imgRef.current ? imgRef.current.offsetHeight : 0;
+
+
   return (
     <div className="flex flex-col lg:flex-row w-full gap-6">
       {/* Image Display Area */}
+      {/* The image container itself needs to be relative */}
       <div className="relative flex-1 bg-white p-4 rounded-lg shadow-lg flex justify-center items-center">
         {!imageUrl && (
           <p className="text-gray-500 text-lg">Upload an image to start annotating.</p>
         )}
         {imageUrl && (
+          // THIS IS THE KEY DIV: It's relative, contains the image, and will contain annotations.
+          // Mouse events for drawing are now on this div.
           <div
-            ref={imageContainerRef}
-            className="relative w-full cursor-crosshair"
+            ref={imageWrapperRef} // Assign ref to this div for correct coordinate calculation
+            className="relative w-full h-auto cursor-crosshair" // Added cursor-crosshair here
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
           >
             <img
+              ref={imgRef} // Assign ref to the img element
               src={imageUrl}
               alt={`Mockup: ${name}`}
               className="w-full h-auto object-contain"
               draggable="false"
-              onLoad={(e) => {
-                // No need to adjust paddingBottom anymore, the img itself controls height
-              }}
             />
 
             {/* Display existing annotations */}
@@ -175,10 +195,11 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
                   selectedAnnotationIndex === index ? 'border-blue-500 bg-blue-500 bg-opacity-20' : 'border-red-500 bg-red-500 bg-opacity-10'
                 } hover:border-blue-500 hover:bg-blue-500 hover:bg-opacity-20 transition-all duration-150 ease-in-out cursor-pointer flex justify-center items-center`}
                 style={{
-                  left: `${annotation.x}px`,
-                  top: `${annotation.y}px`,
-                  width: `${annotation.width}px`,
-                  height: `${annotation.height}px`,
+                  // Use ratios multiplied by current displayed dimensions
+                  left: `${annotation.ratioX * currentDisplayedWidth}px`,
+                  top: `${annotation.ratioY * currentDisplayedHeight}px`,
+                  width: `${annotation.ratioWidth * currentDisplayedWidth}px`,
+                  height: `${annotation.ratioHeight * currentDisplayedHeight}px`,
                 }}
                 onClick={(e) => handleAnnotationClick(index, e)}
                 title={annotation.apiDetails.name || `Annotation ${index + 1}`}
@@ -192,7 +213,7 @@ function ImageAnnotatorTab({ image, onUpdateImage, onDeleteImage }) {
               </div>
             ))}
 
-            {/* Display the rectangle being drawn */}
+            {/* Display the rectangle being drawn - MOVED HERE */}
             {isDrawing && currentRect.width > 0 && currentRect.height > 0 && (
               <div
                 className="absolute border-2 border-green-500 bg-green-500 bg-opacity-20"
