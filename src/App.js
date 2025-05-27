@@ -14,192 +14,240 @@ function ImageAnnotatorTab({ image, onUpdateImage, activeTool, setSelectedAnnota
   const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
   // State to store the current dimensions of the annotation being drawn
   const [currentRect, setCurrentRect] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  // State for the API details form inputs
-  const [apiDetails, setApiDetails] = useState({
-    name: '',
-    endpoint: '',
-    method: 'GET',
-    requestBody: '', // Added
-    responseBody: '', // Added
-    description: '',
-    parameters: [],
-  });
+
+  // New states for dragging and resizing existing annotations
+  const [isDraggingAnnotation, setIsDraggingAnnotation] = useState(false);
+  const [isResizingAnnotation, setIsResizingAnnotation] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 }); // Offset from mouse to annotation top-left for dragging
+  const [resizeHandle, setResizeHandle] = useState(null); // Which handle is being dragged (e.g., 'se', 'n', 'w')
+  const [initialAnnotationRect, setInitialAnnotationRect] = useState(null); // Original rect when resize/drag starts
+  const [initialMousePos, setInitialMousePos] = useState({ x: 0, y: 0 }); // Initial mouse position for resizing
+
+  // State to track if the image has fully loaded
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   // Ref for the image container (the div that wraps the image and annotations)
   const imageWrapperRef = useRef(null);
   // Ref for the actual <img> element to get its displayed dimensions
   const imgRef = useRef(null);
 
-  // Effect to update apiDetails form when a new annotation is selected or image changes
-  useEffect(() => {
-    if (selectedAnnotationIndex !== null && annotations[selectedAnnotationIndex]) {
-      setApiDetails(annotations[selectedAnnotationIndex].apiDetails);
-    } else {
-      // Reset form if no annotation is selected or image changes
-      setApiDetails({
-        name: '',
-        endpoint: '',
-        method: 'GET',
-        requestBody: '',
-        responseBody: '',
-        description: '',
-        parameters: [],
-      });
-    }
-  }, [selectedAnnotationIndex, annotations, imageUrl]); // Depend on annotations and imageUrl to reset on image change
+  // Helper to get annotation pixel dimensions from ratios
+  const getAnnotationPixels = useCallback((annotation) => {
+    const displayedWidth = imgRef.current ? imgRef.current.offsetWidth : 0;
+    const displayedHeight = imgRef.current ? imgRef.current.offsetHeight : 0;
+    return {
+      x: annotation.ratioX * displayedWidth,
+      y: annotation.ratioY * displayedHeight,
+      width: annotation.ratioWidth * displayedWidth,
+      height: annotation.ratioHeight * displayedHeight,
+    };
+  }, []);
 
-  // Handle mouse down event on the image wrapper to start drawing or select
-  const handleMouseDown = (event) => {
-    if (!imageUrl || !imageWrapperRef.current) return; // Only interact if an image is loaded and wrapper exists
+  // Handle mouse down event on the image wrapper to start drawing, dragging, or resizing
+  const handleMouseDown = useCallback((event) => {
+    if (!imageUrl || !imageWrapperRef.current || !imgRef.current || !imageLoaded) return; // Ensure image is loaded
 
     const rect = imageWrapperRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const clientX = event.clientX - rect.left;
+    const clientY = event.clientY - rect.top;
 
-    // Check if an existing annotation was clicked
+    // Check if a resize handle was clicked
+    const target = event.target;
+    if (target.dataset.resizeHandle) {
+      setIsResizingAnnotation(true);
+      setResizeHandle(target.dataset.resizeHandle);
+      setInitialAnnotationRect(getAnnotationPixels(annotations[selectedAnnotationIndex]));
+      setInitialMousePos({ x: clientX, y: clientY }); // Capture initial mouse position for resizing
+      event.stopPropagation(); // Prevent dragging if resizing
+      return;
+    }
+
+    // Check if an existing annotation was clicked for dragging
     const clickedAnnotationIndex = annotations.findIndex(annotation => {
-      const annX = annotation.ratioX * imgRef.current.offsetWidth;
-      const annY = annotation.ratioY * imgRef.current.offsetHeight;
-      const annWidth = annotation.ratioWidth * imgRef.current.offsetWidth;
-      const annHeight = annotation.ratioHeight * imgRef.current.offsetHeight;
-      return x >= annX && x <= annX + annWidth && y >= annY && y <= annY + annHeight;
+      const annPixels = getAnnotationPixels(annotation);
+      return clientX >= annPixels.x && clientX <= annPixels.x + annPixels.width &&
+             clientY >= annPixels.y && clientY <= annPixels.y + annPixels.height;
     });
 
-    if (clickedAnnotationIndex !== -1) {
-      // If an annotation was clicked, select it
+    if (clickedAnnotationIndex !== -1 && activeTool === 'select') {
       setSelectedAnnotationIndex(clickedAnnotationIndex);
-      setIsDrawing(false); // Ensure drawing is off if an existing annotation is clicked
+      setIsDraggingAnnotation(true);
+      const annPixels = getAnnotationPixels(annotations[clickedAnnotationIndex]);
+      // Calculate offset from mouse to annotation's top-left corner
+      setDragOffset({ x: clientX - annPixels.x, y: clientY - annPixels.y });
+      setIsDrawing(false); // Ensure drawing is off
     } else if (activeTool === 'draw') {
       // If no annotation was clicked and 'draw' tool is active, start drawing
       setIsDrawing(true);
-      setStartPoint({ x, y });
-      setCurrentRect({ x, y, width: 0, height: 0 });
+      setStartPoint({ x: clientX, y: clientY });
+      setCurrentRect({ x: clientX, y: clientY, width: 0, height: 0 });
       setSelectedAnnotationIndex(null); // Deselect any active annotation when starting to draw a new one
-    } else if (activeTool === 'select') {
+      setIsDraggingAnnotation(false);
+      setIsResizingAnnotation(false);
+    } else if (activeTool === 'select' && clickedAnnotationIndex === -1) {
       // If 'select' tool is active and empty space is clicked, deselect
       setSelectedAnnotationIndex(null);
-      setIsDrawing(false); // Ensure drawing is off
+      setIsDrawing(false);
+      setIsDraggingAnnotation(false);
+      setIsResizingAnnotation(false);
     }
-  };
+  }, [activeTool, annotations, getAnnotationPixels, imageUrl, imageLoaded, selectedAnnotationIndex, setSelectedAnnotationIndex]);
 
-  // Handle mouse move event while drawing
-  const handleMouseMove = (event) => {
-    if (!isDrawing || !imageUrl || !imageWrapperRef.current) return;
+
+  // Handle mouse move event while drawing, dragging, or resizing
+  const handleMouseMove = useCallback((event) => {
+    if (!imageUrl || !imageWrapperRef.current || !imgRef.current || !imageLoaded) return;
 
     const rect = imageWrapperRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const clientX = event.clientX - rect.left;
+    const clientY = event.clientY - rect.top;
 
-    // Calculate current rectangle dimensions
-    const newX = Math.min(startPoint.x, x);
-    const newY = Math.min(startPoint.y, y);
-    const newWidth = Math.abs(x - startPoint.x);
-    const newHeight = Math.abs(y - startPoint.y);
+    const displayedWidth = imgRef.current.offsetWidth;
+    const displayedHeight = imgRef.current.offsetHeight;
 
-    setCurrentRect({ x: newX, y: newY, width: newWidth, height: newHeight });
-  };
+    if (isDrawing) {
+      // Calculate current rectangle dimensions for drawing new annotation
+      const newX = Math.min(startPoint.x, clientX);
+      const newY = Math.min(startPoint.y, clientY);
+      const newWidth = Math.abs(clientX - startPoint.x);
+      const newHeight = Math.abs(clientY - startPoint.y);
+      setCurrentRect({ x: newX, y: newY, width: newWidth, height: newHeight });
+    } else if (isDraggingAnnotation && selectedAnnotationIndex !== null) {
+      // Calculate new position for dragging existing annotation
+      const newX = clientX - dragOffset.x;
+      const newY = clientY - dragOffset.y;
 
-  // Handle mouse up event to finish drawing
+      // Boundary checks for dragging
+      const currentAnnPixels = getAnnotationPixels(annotations[selectedAnnotationIndex]); // Get current pixel dimensions
+      const imgWidth = imgRef.current.offsetWidth;
+      const imgHeight = imgRef.current.offsetHeight;
+
+      const boundedX = Math.max(0, Math.min(newX, imgWidth - currentAnnPixels.width));
+      const boundedY = Math.max(0, Math.min(newY, imgHeight - currentAnnPixels.height));
+
+
+      const updatedAnnotations = annotations.map((ann, idx) => {
+        if (idx === selectedAnnotationIndex) {
+          return {
+            ...ann,
+            ratioX: boundedX / imgWidth,
+            ratioY: boundedY / imgHeight,
+          };
+        }
+        return ann;
+      });
+      onUpdateImage({ ...image, annotations: updatedAnnotations });
+    } else if (isResizingAnnotation && selectedAnnotationIndex !== null && initialAnnotationRect) {
+      // Calculate new dimensions for resizing existing annotation
+      let { x, y, width, height } = initialAnnotationRect;
+      const dx = clientX - initialMousePos.x; // Correct delta X from initial mouse down
+      const dy = clientY - initialMousePos.y; // Correct delta Y from initial mouse down
+
+      switch (resizeHandle) {
+        case 'n':
+          height = initialAnnotationRect.height - dy;
+          y = initialAnnotationRect.y + dy;
+          break;
+        case 'ne':
+          width = initialAnnotationRect.width + dx;
+          height = initialAnnotationRect.height - dy;
+          y = initialAnnotationRect.y + dy;
+          break;
+        case 'e':
+          width = initialAnnotationRect.width + dx;
+          break;
+        case 'se':
+          width = initialAnnotationRect.width + dx;
+          height = initialAnnotationRect.height + dy;
+          break;
+        case 's':
+          height = initialAnnotationRect.height + dy;
+          break;
+        case 'sw':
+          width = initialAnnotationRect.width - dx;
+          x = initialAnnotationRect.x + dx;
+          height = initialAnnotationRect.height + dy;
+          break;
+        case 'w':
+          width = initialAnnotationRect.width - dx;
+          x = initialAnnotationRect.x + dx;
+          break;
+        case 'nw':
+          width = initialAnnotationRect.width - dx;
+          x = initialAnnotationRect.x + dx;
+          height = initialAnnotationRect.height - dy;
+          y = initialAnnotationRect.y + dy;
+          break;
+        default:
+          break;
+      }
+
+      // Ensure minimum size and prevent negative dimensions
+      width = Math.max(width, 10);
+      height = Math.max(height, 10);
+      // Also ensure x and y don't go out of bounds (optional, but good practice)
+      x = Math.max(0, Math.min(x, displayedWidth - width));
+      y = Math.max(0, Math.min(y, displayedHeight - height));
+
+      const updatedAnnotations = annotations.map((ann, idx) => {
+        if (idx === selectedAnnotationIndex) {
+          return {
+            ...ann,
+            ratioX: x / displayedWidth,
+            ratioY: y / displayedHeight,
+            ratioWidth: width / displayedWidth,
+            ratioHeight: height / displayedHeight,
+          };
+        }
+        return ann;
+      });
+      onUpdateImage({ ...image, annotations: updatedAnnotations });
+    }
+  }, [isDrawing, startPoint, isDraggingAnnotation, selectedAnnotationIndex, dragOffset, annotations, image, onUpdateImage, isResizingAnnotation, resizeHandle, initialAnnotationRect, initialMousePos, imageUrl, imageLoaded, getAnnotationPixels]);
+
+
+  // Handle mouse up event to finish drawing, dragging, or resizing
   const handleMouseUp = useCallback(() => {
     if (isDrawing) {
       setIsDrawing(false);
-      // If the drawn rectangle has a valid size, add it as a new annotation
-      if (currentRect.width > 5 && currentRect.height > 5) { // Minimum size to avoid tiny clicks
-        const imgElement = imgRef.current;
-        if (!imgElement) return; // Should not happen if drawing is active
-
-        // Get current displayed dimensions of the image
-        const displayedWidth = imgElement.offsetWidth;
-        const displayedHeight = imgElement.offsetHeight;
-
-        // Store ratios instead of absolute pixels
+      if (currentRect.width > 5 && currentRect.height > 5) {
+        const displayedWidth = imgRef.current.offsetWidth;
+        const displayedHeight = imgRef.current.offsetHeight;
         const newAnnotation = {
-          id: generateId(), // Assign a unique ID to the annotation
+          id: generateId(),
           ratioX: currentRect.x / displayedWidth,
           ratioY: currentRect.y / displayedHeight,
           ratioWidth: currentRect.width / displayedWidth,
           ratioHeight: currentRect.height / displayedHeight,
           apiDetails: {
-            name: '',
-            endpoint: '',
-            method: 'GET',
-            requestBody: '',
-            responseBody: '',
-            description: '',
-            parameters: [],
+            name: '', endpoint: '', method: 'GET', requestBody: '', responseBody: '', parameters: [], description: ''
           }
         };
         const updatedAnnotations = [...annotations, newAnnotation];
         onUpdateImage({ ...image, annotations: updatedAnnotations });
-        setSelectedAnnotationIndex(updatedAnnotations.length - 1); // Select the newly created annotation
+        setSelectedAnnotationIndex(updatedAnnotations.length - 1);
       }
-      setCurrentRect({ x: 0, y: 0, width: 0, height: 0 }); // Reset current drawing rect
+      setCurrentRect({ x: 0, y: 0, width: 0, height: 0 });
     }
-  }, [isDrawing, currentRect, annotations, image, onUpdateImage, setSelectedAnnotationIndex]); // Dependencies for useCallback
+    setIsDraggingAnnotation(false);
+    setIsResizingAnnotation(false);
+    setDragOffset({ x: 0, y: 0 });
+    setResizeHandle(null);
+    setInitialAnnotationRect(null);
+    setInitialMousePos({ x: 0, y: 0 });
+  }, [isDrawing, currentRect, annotations, image, onUpdateImage, setSelectedAnnotationIndex]);
 
-  // Handle changes in the API details form
-  const handleApiDetailsChange = (event) => {
-    const { name, value } = event.target;
-    setApiDetails((prev) => ({ ...prev, [name]: value }));
-  };
-
-  // Handle changes in API parameters
-  const handleParameterChange = (index, field, value) => {
-    const updatedParameters = apiDetails.parameters.map((param, i) =>
-      i === index ? { ...param, [field]: value } : param
-    );
-    setApiDetails((prev) => ({ ...prev, parameters: updatedParameters }));
-  };
-
-  // Add a new parameter row
-  const addParameter = () => {
-    setApiDetails((prev) => ({
-      ...prev,
-      parameters: [...prev.parameters, { key: '', type: '' }], // Removed description as per image
-    }));
-  };
-
-  // Remove a parameter row
-  const removeParameter = (index) => {
-    setApiDetails((prev) => ({
-      ...prev,
-      parameters: prev.parameters.filter((_, i) => i !== index),
-    }));
-  };
-
-  // Save API details to the selected annotation
-  const saveApiDetails = () => {
-    if (selectedAnnotationIndex !== null) {
-      const updatedAnnotations = annotations.map((annotation, index) =>
-        index === selectedAnnotationIndex
-          ? { ...annotation, apiDetails: apiDetails }
-          : annotation
-      );
-      onUpdateImage({ ...image, annotations: updatedAnnotations });
-    }
-  };
-
-  // Delete the selected annotation
-  const deleteAnnotation = () => {
-    if (selectedAnnotationIndex !== null) {
-      const updatedAnnotations = annotations.filter((_, index) => index !== selectedAnnotationIndex);
-      onUpdateImage({ ...image, annotations: updatedAnnotations });
-      setSelectedAnnotationIndex(null); // Deselect after deletion
-    }
-  };
-
-  // Effect to add/remove global mouse event listeners for drawing
+  // Effect to add/remove global mouse event listeners for drawing, dragging, and resizing
   useEffect(() => {
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [handleMouseUp]); // Only re-run if handleMouseUp changes
+  }, [handleMouseUp]);
 
   // Get current displayed image dimensions for rendering annotations
   const currentDisplayedWidth = imgRef.current ? imgRef.current.offsetWidth : 0;
   const currentDisplayedHeight = imgRef.current ? imgRef.current.offsetHeight : 0;
-
 
   return (
     <div className="flex flex-col lg:flex-row w-full h-full gap-6">
@@ -226,35 +274,53 @@ function ImageAnnotatorTab({ image, onUpdateImage, activeTool, setSelectedAnnota
               alt={`Mockup: ${name}`}
               className="w-full h-auto object-contain"
               draggable="false"
+              onLoad={() => setImageLoaded(true)} // Set imageLoaded to true when image loads
             />
 
-            {/* Display existing annotations */}
-            {annotations.map((annotation, index) => (
-              <div
-                key={annotation.id}
-                className={`absolute border-2 ${
-                  selectedAnnotationIndex === index ? 'border-blue-500 bg-blue-500 bg-opacity-20' : 'border-red-500 bg-red-500 bg-opacity-10'
-                } hover:border-blue-500 hover:bg-blue-500 hover:bg-opacity-20 transition-all duration-150 ease-in-out cursor-pointer flex justify-center items-center rounded-md`}
-                style={{
-                  left: `${annotation.ratioX * currentDisplayedWidth}px`,
-                  top: `${annotation.ratioY * currentDisplayedHeight}px`,
-                  width: `${annotation.ratioWidth * currentDisplayedWidth}px`,
-                  height: `${annotation.ratioHeight * currentDisplayedHeight}px`,
-                }}
-                onClick={(e) => {
-                  e.stopPropagation(); // Prevent handleMouseDown on wrapper
-                  setSelectedAnnotationIndex(index);
-                }}
-                title={annotation.apiDetails.name || `Annotation ${index + 1}`}
-              >
-                <span className="absolute -top-6 left-0 text-xs font-bold text-blue-700 bg-blue-100 px-1 py-0.5 rounded-md">
-                  {annotation.apiDetails.name || `Section ${index + 1}`}
-                </span>
-                {selectedAnnotationIndex === index && (
-                  <span className="text-white text-2xl font-bold">+</span>
-                )}
-              </div>
-            ))}
+            {/* Display existing annotations only if image is loaded */}
+            {imageLoaded && annotations.map((annotation, index) => {
+              const annPixels = getAnnotationPixels(annotation);
+              const isSelected = selectedAnnotationIndex === index;
+              return (
+                <div
+                  key={annotation.id}
+                  className={`absolute border-2 ${
+                    isSelected ? 'border-blue-500 bg-blue-500 bg-opacity-20' : 'border-red-500 bg-red-500 bg-opacity-10'
+                  } hover:border-blue-500 hover:bg-blue-500 hover:bg-opacity-20 transition-all duration-150 ease-in-out flex justify-center items-center rounded-md`}
+                  style={{
+                    left: `${annPixels.x}px`,
+                    top: `${annPixels.y}px`,
+                    width: `${annPixels.width}px`,
+                    height: `${annPixels.height}px`,
+                    cursor: activeTool === 'select' && isSelected ? 'grab' : (activeTool === 'select' ? 'pointer' : 'default'), // Change cursor for dragging
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (activeTool === 'select') {
+                      setSelectedAnnotationIndex(index);
+                    }
+                  }}
+                  title={annotation.apiDetails.name || `Annotation ${index + 1}`}
+                >
+                  <span className="absolute -top-6 left-0 text-xs font-bold text-blue-700 bg-blue-100 px-1 py-0.5 rounded-md">
+                    {annotation.apiDetails.name || `Section ${index + 1}`}
+                  </span>
+                  {isSelected && activeTool === 'select' && (
+                    <>
+                      {/* Resize Handles - Half size (w-1.5 h-1.5) and adjusted positioning */}
+                      <div className="absolute w-1.5 h-1.5 bg-blue-700 border border-white rounded-full -top-0.5 -left-0.5 cursor-nwse-resize" data-resize-handle="nw"></div>
+                      <div className="absolute w-1.5 h-1.5 bg-blue-700 border border-white rounded-full -top-0.5 left-1/2 -translate-x-1/2 cursor-ns-resize" data-resize-handle="n"></div>
+                      <div className="absolute w-1.5 h-1.5 bg-blue-700 border border-white rounded-full -top-0.5 -right-0.5 cursor-nesw-resize" data-resize-handle="ne"></div>
+                      <div className="absolute w-1.5 h-1.5 bg-blue-700 border border-white rounded-full top-1/2 -right-0.5 -translate-y-1/2 cursor-ew-resize" data-resize-handle="e"></div>
+                      <div className="absolute w-1.5 h-1.5 bg-blue-700 border border-white rounded-full -bottom-0.5 -right-0.5 cursor-nwse-resize" data-resize-handle="se"></div>
+                      <div className="absolute w-1.5 h-1.5 bg-blue-700 border border-white rounded-full -bottom-0.5 left-1/2 -translate-x-1/2 cursor-ns-resize" data-resize-handle="s"></div>
+                      <div className="absolute w-1.5 h-1.5 bg-blue-700 border border-white rounded-full -bottom-0.5 -left-0.5 cursor-nesw-resize" data-resize-handle="sw"></div>
+                      <div className="absolute w-1.5 h-1.5 bg-blue-700 border border-white rounded-full top-1/2 -left-0.5 -translate-y-1/2 cursor-ew-resize" data-resize-handle="w"></div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
 
             {/* Display the rectangle being drawn */}
             {isDrawing && currentRect.width > 0 && currentRect.height > 0 && (
@@ -283,9 +349,6 @@ function App() {
   const [selectedImageId, setSelectedImageId] = useState(null);
   // State to manage the input for new tab names
   const [newTabName, setNewTabName] = useState('');
-  // State to manage the input for renaming current tab
-  const [editingTabName, setEditingTabName] = useState(false);
-  const [currentTabNameInput, setCurrentTabNameInput] = useState('');
   // State for the active annotation tool
   const [activeTool, setActiveTool] = useState('select'); // 'select' or 'draw'
   // State for the selected annotation index, lifted from ImageAnnotatorTab
@@ -340,24 +403,6 @@ function App() {
 
   // Find the currently selected image object
   const currentImage = images.find((img) => img.id === selectedImageId);
-
-  // Handle renaming the current tab
-  const handleRenameTab = () => {
-    if (currentImage) {
-      setImages((prev) =>
-        prev.map((img) =>
-          img.id === currentImage.id ? { ...img, name: currentTabNameInput } : img
-        )
-      );
-      setEditingTabName(false);
-    }
-  };
-
-  // Start editing tab name
-  const startEditingTabName = (imageName) => {
-    setEditingTabName(true);
-    setCurrentTabNameInput(imageName);
-  };
 
   // Function to save all images and annotations to a JSON file
   const handleExportProject = () => {
